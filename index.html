@@ -232,17 +232,20 @@ predictBtn.onclick = async () => {
     } catch (err) {
       errorMsg.textContent = 'Error fetching prediction.';
     }
-  } else if (fileInput.files.length > 0) {
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('type', 'image');
-    formData.append('file', file);
+ } else if (fileInput.files.length > 0) {
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async function () {
+    const base64Image = reader.result; // already includes `data:image/jpeg;base64,...`
+
+    resultOutput.textContent = 'Analyzing chart screenshot... Please wait.';
 
     try {
-      resultOutput.textContent = 'Analyzing chart screenshot... Please wait.';
       const res = await fetch('/api/predict', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'image', imageData: base64Image }),
       });
 
       const data = await res.json();
@@ -250,10 +253,10 @@ predictBtn.onclick = async () => {
     } catch (err) {
       errorMsg.textContent = 'Error fetching AI prediction.';
     }
-  } else {
-    errorMsg.textContent = 'Please enter a period number or upload a valid chart screenshot.';
-  }
-};
+  };
+
+  reader.readAsDataURL(file);
+}
 
   
   </script>
