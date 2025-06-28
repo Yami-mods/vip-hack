@@ -15,43 +15,73 @@ const openai = new OpenAI({
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const form = new IncomingForm();
-  form.parse(req, async (err, fields, files) => {
-    if (err) return res.status(500).json({ error: 'Form parse error' });
+  try {
+    const body = await req.json(); // For JSON body
+    const { type, value, imageData } = body;
 
-    try {
-      if (fields.type === 'text') {
-        const period = fields.value;
-        const response = await openai.chat.completions.create({
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (type === 'text') {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           model: 'gpt-4',
-          messages: [{ role: 'user', content: `Predict Wingo result for period ${period}. Output either BIG or SMALL.` }],
-        });
-        const reply = response.choices[0].message.content.trim();
-        return res.status(200).json({ prediction: reply });
-      }
+          messages: [
+            {
+              role: 'user',
+              content: `Predict Wingo result for period ${value}. Output either BIG or SMALL.`,
+            },
+          ],
+        }),
+      });
 
-      if (fields.type === 'image' && files.file) {
-        const fileData = fs.createReadStream(files.file[0].filepath);
-        const vision = await openai.chat.completions.create({
+      const data = await response.json();
+      const prediction = data.choices[0]?.message?.content?.trim();
+      return res.status(200).json({ prediction });
+    }
+
+    if (type === 'image' && imageData) {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           model: 'gpt-4-vision-preview',
           messages: [
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Analyze this Wingo chart and predict the next result (BIG or SMALL).' },
-                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(files.file[0].filepath, 'base64')}` } },
+                {
+                  type: 'text',
+                  text: 'Analyze this Wingo chart and predict the next result (BIG or SMALL).',
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageData,
+                  },
+                },
               ],
             },
           ],
-        });
+        }),
+      });
 
-        const reply = vision.choices[0].message.content.trim();
-        return res.status(200).json({ prediction: reply });
-      }
-
-      return res.status(400).json({ error: 'Invalid input' });
-    } catch (e) {
-      return res.status(500).json({ error: 'OpenAI error', details: e.message });
+      const data = await response.json();
+      const prediction = data.choices[0]?.message?.content?.trim();
+      return res.status(200).json({ prediction });
     }
-  });
+
+    return res.status(400).json({ error: 'Invalid input format' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Server error', detail: error.message });
+  }
 }
+
